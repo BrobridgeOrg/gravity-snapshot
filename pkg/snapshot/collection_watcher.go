@@ -25,8 +25,7 @@ func NewCollection() *Collection {
 func (c *Collection) assertStream(streamName string) error {
 
 	// Preparing JetStream
-	nc := c.client.GetConnection()
-	js, err := nc.JetStream()
+	js, err := c.client.GetJetStream()
 	if err != nil {
 		return err
 	}
@@ -71,11 +70,14 @@ func (c *Collection) watch(partition uint64, fn func(string, uint64, *nats.Msg))
 	durableName := fmt.Sprintf("%s-%s-%d-SNAPSHOT", c.domain, c.name, partition)
 
 	// Preparing JetStream
-	nc := c.client.GetConnection()
-	js, err := nc.JetStream()
+	js, err := c.client.GetJetStream()
 	if err != nil {
 		return err
 	}
+
+	logger.Info("Watching collection",
+		zap.String("stream", streamName),
+	)
 
 	// Subscribe to stream
 	_, err = js.Subscribe(subject, func(msg *nats.Msg) {

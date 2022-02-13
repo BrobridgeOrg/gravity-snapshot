@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/BrobridgeOrg/gravity-snapshot/pkg/configs"
@@ -8,6 +9,7 @@ import (
 	"github.com/BrobridgeOrg/gravity-snapshot/pkg/snapshot"
 	"github.com/BrobridgeOrg/gravity-snapshot/pkg/view_manager"
 	"github.com/nats-io/nats.go"
+	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
 
@@ -20,7 +22,7 @@ type RPC struct {
 	routes      *Route
 }
 
-func New(config *configs.Config, l *zap.Logger, c *connector.Connector, s *snapshot.Snapshot, vm *view_manager.ViewManager) *RPC {
+func New(lifecycle fx.Lifecycle, config *configs.Config, l *zap.Logger, c *connector.Connector, s *snapshot.Snapshot, vm *view_manager.ViewManager) *RPC {
 
 	logger = l.Named("RPC")
 
@@ -30,25 +32,40 @@ func New(config *configs.Config, l *zap.Logger, c *connector.Connector, s *snaps
 		viewManager: vm,
 	}
 
-	// Preparing prefix
-	prefix := fmt.Sprintf("$GRAVITY.%s.API.SNAPSHOT", rpc.connector.GetDomain())
-	rpc.routes = NewRoute(prefix)
-	rpc.register()
+	lifecycle.Append(
+		fx.Hook{
+			OnStart: func(context.Context) error {
+
+				// Preparing prefix
+				prefix := fmt.Sprintf("$GRAVITY.%s.API.SNAPSHOT", rpc.connector.GetDomain())
+				rpc.routes = NewRoute(rpc, prefix)
+
+				logger.Info("Initializing RPC",
+					zap.String("prefix", prefix),
+				)
+				return rpc.register()
+			},
+			OnStop: func(ctx context.Context) error {
+				return nil
+			},
+		},
+	)
 
 	return rpc
 }
 
-func (rpc *RPC) register() {
+func (rpc *RPC) register() error {
 	rpc.routes.Handle("VIEW.CREATE", rpc.createSnapshotView)
 	rpc.routes.Handle("VIEW.DELETE", rpc.deleteSnapshotView)
 	rpc.routes.Handle("VIEW.PULL", rpc.pullSnapshotView)
+
+	return nil
 }
 
 func (rpc *RPC) assertStream(streamName string) error {
 
 	// Preparing JetStream
-	nc := rpc.connector.GetClient().GetConnection()
-	js, err := nc.JetStream()
+	js, err := rpc.connector.GetClient().GetJetStream()
 	if err != nil {
 		return err
 	}

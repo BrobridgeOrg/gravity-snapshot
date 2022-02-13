@@ -7,8 +7,9 @@ type Route struct {
 	rpc    *RPC
 }
 
-func NewRoute(prefix string) *Route {
+func NewRoute(rpc *RPC, prefix string) *Route {
 	return &Route{
+		rpc:    rpc,
 		prefix: prefix,
 	}
 }

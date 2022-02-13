@@ -1,6 +1,7 @@
 package snapshot
 
 import (
+	"context"
 	"fmt"
 
 	eventstore "github.com/BrobridgeOrg/EventStore"
@@ -8,6 +9,7 @@ import (
 	"github.com/BrobridgeOrg/gravity-snapshot/pkg/connector"
 	"github.com/nats-io/nats.go"
 	"github.com/spf13/viper"
+	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
 
@@ -22,7 +24,7 @@ type Snapshot struct {
 	handler    *SnapshotHandler
 }
 
-func New(config *configs.Config, l *zap.Logger, c *connector.Connector) *Snapshot {
+func New(lifecycle fx.Lifecycle, config *configs.Config, l *zap.Logger, c *connector.Connector) *Snapshot {
 
 	logger = l.Named("Snapshot")
 
@@ -34,10 +36,18 @@ func New(config *configs.Config, l *zap.Logger, c *connector.Connector) *Snapsho
 
 	// Initializing event watcher
 	d.watcher = NewCollectionWatcher(d.connector.GetClient(), d.connector.GetDomain())
-
 	d.registerCollections()
 
-	d.Run()
+	lifecycle.Append(
+		fx.Hook{
+			OnStart: func(context.Context) error {
+				return d.Run()
+			},
+			OnStop: func(ctx context.Context) error {
+				return nil
+			},
+		},
+	)
 
 	return d
 }
@@ -79,16 +89,18 @@ func (d *Snapshot) initializeStore() error {
 	return nil
 }
 
-func (d *Snapshot) registerCollections() {
+func (d *Snapshot) registerCollections() error {
 
 	// Default events
 	for _, e := range d.config.Collections {
 		logger.Info(fmt.Sprintf("Regiserted collection: %s", e))
 		d.watcher.RegisterCollection(e)
 	}
+
+	return nil
 }
 
-func (d *Snapshot) Run() {
+func (d *Snapshot) Run() error {
 
 	d.watcher.Watch(func(collection string, partition uint64, msg *nats.Msg) {
 
@@ -101,4 +113,6 @@ func (d *Snapshot) Run() {
 		d.eventstore.TakeSnapshot(d.store, meta.Sequence.Consumer, msg.Data)
 
 	})
+
+	return nil
 }

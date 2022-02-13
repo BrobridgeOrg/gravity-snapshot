@@ -7,7 +7,6 @@ import (
 	"github.com/BrobridgeOrg/gravity-snapshot/pkg/connector"
 	"github.com/BrobridgeOrg/gravity-snapshot/pkg/logger"
 	"github.com/BrobridgeOrg/gravity-snapshot/pkg/rpc"
-	"github.com/BrobridgeOrg/gravity-snapshot/pkg/service"
 	"github.com/BrobridgeOrg/gravity-snapshot/pkg/snapshot"
 	"github.com/BrobridgeOrg/gravity-snapshot/pkg/view_manager"
 	"github.com/spf13/cobra"
@@ -48,8 +47,6 @@ func main() {
 
 func run() error {
 
-	var serv *service.Service
-
 	config.AddCollections(collections)
 
 	fx.New(
@@ -61,7 +58,7 @@ func run() error {
 			view_manager.New,
 		),
 		fx.Invoke(rpc.New),
-		fx.Populate(&serv),
+		fx.NopLogger,
 	).Run()
 
 	return nil
